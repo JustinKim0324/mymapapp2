@@ -1,0 +1,80 @@
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+
+st.set_page_config(page_title="나스닥 100 시총 Top 10 기업 주가 현황", page_icon="📈", layout="wide")
+
+NASDAQ_TOP_10 = {
+    "Apple": ("AAPL", "스마트폰, PC 및 디지털 서비스 분야를 선도하는 글로벌 IT 기업."),
+    "Microsoft": ("MSFT", "소프트웨어, 클라우드, 인공지능 서비스를 제공하는 기술 기업."),
+    "Alphabet": ("GOOGL", "Google의 모회사로 검색, 광고, 클라우드 사업을 운영하는 기업."),
+    "Amazon": ("AMZN", "세계 최대의 온라인 리테일 및 클라우드 컴퓨팅 서비스 기업."),
+    "NVIDIA": ("NVDA", "그래픽 카드 및 인공지능 반도체 분야 글로벌 리더 기업."),
+    "Tesla": ("TSLA", "전기자동차와 청정에너지 솔루션을 제공하는 기업."),
+    "Meta": ("META", "소셜미디어 플랫폼 Facebook과 Instagram의 모회사."),
+    "Broadcom": ("AVGO", "반도체 및 소프트웨어 솔루션을 제공하는 글로벌 기술기업."),
+    "PepsiCo": ("PEP", "음료와 식품을 제조하고 유통하는 글로벌 기업."),
+    "Costco": ("COST", "대형 회원제 창고형 할인매장 운영 기업.")
+}
+
+@st.cache_data
+def get_stock_data(ticker, start_date="2024-01-01"):
+    return yf.Ticker(ticker).history(start=start_date)
+
+st.title("📈 나스닥 100 시총 Top 10 기업 주가 비교 (2024년 1월 이후)")
+st.markdown("나스닥 100 시가총액 상위 10개 기업의 올해 주가 상승률을 비교합니다.")
+
+selected_companies = st.sidebar.multiselect(
+    "기업 선택:",
+    options=list(NASDAQ_TOP_10.keys()),
+    default=list(NASDAQ_TOP_10.keys())[:3]
+)
+
+if not selected_companies:
+    st.warning("최소 한 개의 기업을 선택하세요.")
+    st.stop()
+
+with st.spinner("데이터 로딩 중..."):
+    stock_data = {company: get_stock_data(NASDAQ_TOP_10[company][0]) for company in selected_companies}
+
+st.header("📊 기업 개요")
+cols = st.columns(len(selected_companies))
+
+for idx, company in enumerate(selected_companies):
+    ticker, summary = NASDAQ_TOP_10[company]
+    current_price = stock_data[company]['Close'].iloc[-1]
+    with cols[idx]:
+        st.metric(label=f"{company}", value=f"${current_price:.2f}")
+        st.caption(summary)
+
+st.header("📈 비교 상승률 차트")
+
+fig = go.Figure()
+colors = px.colors.qualitative.Dark24
+
+for idx, company in enumerate(selected_companies):
+    data = stock_data[company]
+    data["Return"] = (data["Close"] / data["Close"].iloc[0] - 1) * 100
+    fig.add_trace(go.Scatter(
+        x=data.index,
+        y=data["Return"],
+        mode="lines",
+        name=company,
+        line=dict(width=2, color=colors[idx % len(colors)]),
+        hovertemplate=f"{company}<br>%{{x|%Y-%m-%d}}<br>상승률: %{{y:.2f}}%<extra></extra>"
+    ))
+
+fig.update_layout(
+    title="2024년 1월 이후 기업별 주가 상승률 (%)",
+    xaxis_title="날짜",
+    yaxis_title="상승률 (%)",
+    template="plotly_white",
+    hovermode="x unified",
+    height=600
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+st.info("데이터 소스: Yahoo Finance | 참고용이며, 투자 결정은 신중히 하십시오.")
